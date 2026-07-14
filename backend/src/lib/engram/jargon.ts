@@ -114,7 +114,68 @@ const JARGON_DICT: Record<
     description: "Maintenance Engineer — shared expertise on Boiler B-7",
     confidence: 0.85,
   },
+  // Hinglish / shop-floor phrases
+  "seal fail": {
+    canonical: "mechanical seal failure",
+    kind: "abbreviation",
+    description: "Shop-floor shorthand for mechanical seal failure events",
+    confidence: 0.88,
+  },
+  "seal phir se fail": {
+    canonical: "repeat mechanical seal failure on Pump P-101",
+    kind: "abbreviation",
+    description: "Hinglish: seal failing again — typically P-101 cavitation pattern",
+    confidence: 0.9,
+  },
+  "phir se fail": {
+    canonical: "repeat failure",
+    kind: "abbreviation",
+    description: "Hinglish: failing again / repeat failure",
+    confidence: 0.85,
+  },
+  "pump ka seal": {
+    canonical: "Pump P-101 mechanical seal",
+    kind: "asset_tag",
+    description: "Hinglish reference to feed-pump mechanical seal",
+    confidence: 0.86,
+  },
+  vibration: {
+    canonical: "high vibration event",
+    kind: "abbreviation",
+    description: "Often maps to P-101 monsoon vibration pattern (2020)",
+    confidence: 0.8,
+  },
+  bearing: {
+    canonical: "SKF Bearing 6205",
+    kind: "abbreviation",
+    description: "Common Unit 3 bearing — used on P-101 and C-3",
+    confidence: 0.75,
+  },
+  "kya kiya tha": {
+    canonical: "what was done previously / historical resolution",
+    kind: "abbreviation",
+    description: "Hinglish: what did we do before — triggers incident history lookup",
+    confidence: 0.9,
+  },
+  "pehle kya kiya": {
+    canonical: "prior corrective action history",
+    kind: "abbreviation",
+    description: "Hinglish: what was done earlier",
+    confidence: 0.9,
+  },
 };
+
+/** Normalize light Hinglish before jargon expansion. */
+export function normalizeHinglish(query: string): string {
+  return query
+    .replace(/\bmein\b/gi, "in")
+    .replace(/\bka\b/gi, " ")
+    .replace(/\bki\b/gi, " ")
+    .replace(/\bho\s+gaya\b/gi, "occurred")
+    .replace(/\brha\b|\braha\b/gi, "happening")
+    .replace(/\bdubara\b/gi, "again")
+    .replace(/\bphir\s+se\b/gi, "again");
+}
 
 function normalizeTerm(term: string): string {
   return term.trim().toLowerCase().replace(/\s+/g, " ");
@@ -150,7 +211,7 @@ export function expandQueryJargon(query: string): {
   resolutions: JargonResolution[];
 } {
   const resolutions: JargonResolution[] = [];
-  let expanded = query;
+  let expanded = normalizeHinglish(query);
 
   // Longer keys first so "ramesh kumar" wins over "ramesh"
   const keys = Object.keys(JARGON_DICT).sort((a, b) => b.length - a.length);

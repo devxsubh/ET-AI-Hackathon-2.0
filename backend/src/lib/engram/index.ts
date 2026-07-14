@@ -6,4 +6,5 @@ export * from "./demoData";
 export * from "./extract";
 export * from "./linker";
 export * from "./ingest";
+export * from "./intelligence";
 export * from "./tools";

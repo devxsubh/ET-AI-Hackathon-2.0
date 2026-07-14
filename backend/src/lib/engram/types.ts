@@ -113,3 +113,151 @@ export function emptyRiskReport(): RiskReport {
     summary: "No knowledge risk analysis yet.",
   };
 }
+
+export type TimelineEvent = {
+  id: string;
+  date: string;
+  kind: "incident" | "document" | "procedure";
+  title: string;
+  description: string;
+  people: string[];
+  procedures: string[];
+  parts: string[];
+  sources: string[];
+  nodeIds: string[];
+  path: string[];
+};
+
+export type QuietKnowledgeFinding = {
+  assetId: string;
+  assetName: string;
+  tipCount: number;
+  tips: string[];
+  informalSources: string[];
+  formalProcedureCount: number;
+  formalDocumentCount: number;
+  severity: "high" | "medium" | "low";
+  narrative: string;
+};
+
+export type SuccessionChecklistItem = {
+  day: number;
+  assetId: string;
+  assetName: string;
+  riskLevel: KnowledgeRiskLevel | "moderate";
+  action: string;
+  documents: string[];
+  incidents: string[];
+};
+
+export type SuccessionPlan = {
+  personId: string;
+  personName: string;
+  buddyId: string | null;
+  buddyName: string | null;
+  criticalAssetCount: number;
+  moderateAssetCount: number;
+  authoredDocumentCount: number;
+  authoredProcedureCount: number;
+  incidentsOnlyTheyFixed: string[];
+  checklist: SuccessionChecklistItem[];
+  quietKnowledge: QuietKnowledgeFinding[];
+  summary: string;
+};
+
+export type ConfidenceBreakdown = {
+  score: number;
+  level: "High" | "Medium" | "Low";
+  reasons: string[];
+};
+
+export type GhostExpertAnswer = {
+  personId: string;
+  personName: string;
+  question: string;
+  confidence: string;
+  confidenceBreakdown: ConfidenceBreakdown;
+  answerLines: string[];
+  evidenceNodes: Array<{ id: string; name: string; type: NodeType }>;
+  citations: string[];
+  traversalPath: string[];
+};
+
+export type FailureTwin = {
+  assetId: string;
+  assetName: string;
+  score: number;
+  sharedParts: string[];
+  sharedProcedures: string[];
+  sharedIncidentThemes: string[];
+  narrative: string;
+};
+
+export type CoverageGap = {
+  assetId: string;
+  assetName: string;
+  missing: string[];
+  severity: "critical" | "moderate";
+  narrative: string;
+};
+
+export type KnowledgeHealthReport = {
+  score: number;
+  grade: "A" | "B" | "C" | "D" | "F";
+  coveragePct: number;
+  criticalKnowledgeAssets: number;
+  quietKnowledgeHigh: number;
+  staleItems: number;
+  coverageGaps: number;
+  nodeCount: number;
+  edgeCount: number;
+  summary: string;
+  drivers: Array<{ label: string; impact: number }>;
+};
+
+export type PartsCascade = {
+  partId: string;
+  partName: string;
+  impactedAssets: Array<{ id: string; name: string }>;
+  impactedProcedures: Array<{ id: string; name: string }>;
+  narrative: string;
+};
+
+export type StaleKnowledgeItem = {
+  nodeId: string;
+  nodeName: string;
+  nodeType: NodeType;
+  lastTouch: string;
+  ageYears: number;
+  narrative: string;
+};
+
+export type MentorshipMatch = {
+  assetId: string;
+  assetName: string;
+  mentorId: string;
+  mentorName: string;
+  menteeId: string;
+  menteeName: string;
+  weeksSuggested: number;
+  rationale: string;
+};
+
+export type ShiftHandoffBrief = {
+  generatedAt: string;
+  healthScore: number;
+  openRisks: string[];
+  overnightWatch: string[];
+  askBeforeLeaving: string[];
+  summary: string;
+};
+
+export type CrossUnitTransfer = {
+  fromUnit: string;
+  toUnit: string;
+  topic: string;
+  matchedAssets: string[];
+  transferredProcedure: string;
+  narrative: string;
+  relevance: number;
+};

@@ -58,6 +58,7 @@ interface Props {
     startupId?: string;
     showSamplePrompts?: boolean;
     samplePrompts?: AssistantSamplePrompt[];
+    placeholder?: string;
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
@@ -73,6 +74,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
         startupId,
         showSamplePrompts = true,
         samplePrompts = ASSISTANT_SAMPLE_PROMPTS,
+        placeholder,
     }: Props,
     ref,
 ) {
@@ -221,13 +223,16 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
     };
 
     const applySamplePrompt = (prompt: string) => {
-        setValue(prompt);
+        if (isLoading) return;
+        onSubmit({
+            role: "user",
+            content: prompt.trim(),
+        });
+        setValue("");
         requestAnimationFrame(() => {
             const el = textareaRef.current;
             if (!el) return;
-            el.focus();
             el.style.height = "auto";
-            el.style.height = `${el.scrollHeight}px`;
         });
     };
 
@@ -320,7 +325,12 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
                         <textarea
                             ref={textareaRef}
                             rows={1}
-                            placeholder="Ask a question… use @StartupName to pull in screening results"
+                            placeholder={
+                                placeholder ??
+                                (startupId
+                                    ? "Ask about an asset, person, or failure…"
+                                    : "Ask a question…")
+                            }
                             value={value}
                             onChange={handleChange}
                             onClick={(e) =>

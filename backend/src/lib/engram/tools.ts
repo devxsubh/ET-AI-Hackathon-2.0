@@ -10,6 +10,21 @@ import {
   computeRiskReport,
   knowledgeRiskForPerson,
 } from "./riskAgent";
+import {
+  askGhostExpert,
+  buildAssetTimeline,
+  buildPlantIntelligence,
+  buildShiftHandoff,
+  buildSuccessionPlan,
+  crossUnitTransfers,
+  detectQuietKnowledge,
+  detectStaleness,
+  findCoverageGaps,
+  findFailureTwins,
+  partsCascade,
+  scoreConfidence,
+  suggestMentorship,
+} from "./intelligence";
 import type { KnowledgeGraph, NodeType } from "./types";
 import { NODE_TYPES } from "./types";
 
@@ -284,10 +299,71 @@ export const askKnowledgeTool: ToolDefinition = {
         ],
         traversalPath: [
           `${result.personName} -[expert_on]-> assets`,
-          ...result.critical.map((a) => `CRITICAL: ${a.assetName}`),
-          ...result.moderate.map((a) => `MODERATE: ${a.assetName}`),
+          ...result.critical.map((a) => `${result.personName} -[expert_on]-> ${a.assetName}`),
+          ...result.moderate.map((a) => `${result.personName} -[expert_on]-> ${a.assetName}`),
         ],
       };
+    }
+
+    // Quiet knowledge shortcut
+    if (/quiet|only in email|not in sop|tribal|informal tip/i.test(question)) {
+      const findings = detectQuietKnowledge(graph);
+      return {
+        content: [
+          "## Quiet Knowledge",
+          ...findings.map(
+            (f) =>
+              `### ${f.assetName}\n${f.narrative}\n${f.tips.map((t) => `- ${t}`).join("\n")}`,
+          ),
+        ].join("\n\n"),
+        knowledgeGraph: graph,
+        confidence: "High",
+        citations: findings.flatMap((f) => f.informalSources),
+        traversalPath: findings.map(
+          (f) => `Email Archive Ramesh 2020 -[informal_tip]-> ${f.assetName}`,
+        ),
+      };
+    }
+
+    // Succession shortcut
+    if (/handoff|succession|30.?day|knowledge transfer plan/i.test(question)) {
+      const person =
+        resolutions.find((r) => r.kind === "person")?.canonical ?? "Ramesh Kumar";
+      const plan = buildSuccessionPlan(graph, person);
+      if (plan) {
+        return {
+          content: [
+            `## Succession Plan — ${plan.personName}`,
+            plan.summary,
+            "",
+            ...plan.checklist.map(
+              (c) => `- Day ${c.day}: ${c.action}`,
+            ),
+          ].join("\n"),
+          knowledgeGraph: graph,
+          riskReport: computeRiskReport(graph),
+          confidence: "High",
+          traversalPath: plan.checklist.map(
+            (c) => `${plan.personName} -[handoff]-> ${c.assetName}`,
+          ),
+        };
+      }
+    }
+
+    // Ghost expert shortcut
+    if (/would ramesh|ghost expert|what would .+ do/i.test(question)) {
+      const person =
+        resolutions.find((r) => r.kind === "person")?.canonical ?? "Ramesh Kumar";
+      const ans = askGhostExpert(graph, person, question);
+      if (ans) {
+        return {
+          content: ans.answerLines.join("\n"),
+          knowledgeGraph: graph,
+          confidence: ans.confidence,
+          citations: ans.citations,
+          traversalPath: ans.traversalPath,
+        };
+      }
     }
 
     // Find best start node from jargon or keyword overlap
@@ -331,36 +407,450 @@ export const askKnowledgeTool: ToolDefinition = {
       .slice(0, 15)
       .map((s) => `${s.fromName} -[${s.edgeType}]-> ${s.toName}`);
 
-    const confidence =
-      resolutions.length > 0 && path.length > 0
-        ? "High"
-        : path.length > 0
-          ? "Medium"
-          : "Low";
+    const hasDocument = nodes.some((n) => n.type === "Document");
+    const hasProcedure = nodes.some((n) => n.type === "Procedure");
+    const hasIncident = nodes.some((n) => n.type === "Incident");
+    const conf = scoreConfidence({
+      hasDocument,
+      hasProcedure,
+      hasIncident,
+      pathHops: path.length,
+      jargonResolved: resolutions.length > 0,
+    });
 
     return {
       content: [
         `## Answer`,
         `Anchored on **${start.name}** (${start.type}).`,
         "",
-        `**Confidence:** ${confidence}`,
+        `**Confidence:** ${conf.level} (${conf.score}/100)`,
+        `_${conf.reasons.join("; ")}_`,
         "",
         "### Evidence nodes",
         evidence,
         "",
-        "### Graph path",
+        "### Graph path (highlight these hops in the explorer)",
         ...pathLines.map((l) => `- ${l}`),
         "",
         "### Sources",
         ...sources.map((s) => `- ${s}`),
         "",
-        "_(Synthesize a plain-English answer for the engineer from this evidence. Do not invent facts.)_",
+        "_(Synthesize a plain-English answer for the engineer from this evidence. Do not invent facts. Mention the graph path so the UI can highlight it.)_",
       ].join("\n"),
       knowledgeGraph: graph,
       riskReport: ctx.riskReport ?? computeRiskReport(graph),
-      confidence,
+      confidence: conf.level,
       citations: sources,
       traversalPath: pathLines,
+    };
+  },
+};
+
+export const successionPlanTool: ToolDefinition = {
+  name: "get_succession_plan",
+  routingHint:
+    "- get_succession_plan: 30-day knowledge handoff checklist when an expert retires or leaves.",
+  schema: {
+    name: "get_succession_plan",
+    description:
+      "Generate a 30-day knowledge succession / handoff plan for an engineer.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        person_name: {
+          type: "string",
+          description: "Person to build handoff for (default Ramesh Kumar)",
+        },
+      },
+    },
+  },
+  handler: async (input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const person =
+      (input as { person_name?: string }).person_name?.trim() || "Ramesh Kumar";
+    const plan = buildSuccessionPlan(graph, person);
+    if (!plan) return { content: `Person "${person}" not found.` };
+    return {
+      content: [
+        `## Succession Plan — ${plan.personName}`,
+        plan.summary,
+        plan.buddyName ? `Suggested buddy: **${plan.buddyName}**` : "",
+        "",
+        "### 30-day checklist",
+        ...plan.checklist.map(
+          (c) =>
+            `- **Day ${c.day}** [${c.riskLevel}] ${c.assetName}: ${c.action}`,
+        ),
+        "",
+        "### Incidents only they fixed",
+        ...plan.incidentsOnlyTheyFixed.map((i) => `- ${i}`),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      knowledgeGraph: graph,
+      riskReport: computeRiskReport(graph),
+      confidence: "High",
+      traversalPath: plan.checklist.map(
+        (c) => `${plan.personName} -[handoff]-> ${c.assetName}`,
+      ),
+    };
+  },
+};
+
+export const quietKnowledgeTool: ToolDefinition = {
+  name: "get_quiet_knowledge",
+  routingHint:
+    "- get_quiet_knowledge: find repair tips that exist only in emails/notes, not formal SOPs.",
+  schema: {
+    name: "get_quiet_knowledge",
+    description:
+      "Detect quiet/tribal knowledge — informal tips not captured in SOPs.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  handler: async (_input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const findings = detectQuietKnowledge(graph);
+    return {
+      content: [
+        "## Quiet Knowledge Detector",
+        ...findings.map(
+          (f) =>
+            `### ${f.assetName} (${f.severity})\n${f.narrative}\n${f.tips.map((t) => `- ${t}`).join("\n")}`,
+        ),
+      ].join("\n\n"),
+      knowledgeGraph: graph,
+      confidence: "High",
+      citations: findings.flatMap((f) => f.informalSources),
+      traversalPath: findings.map(
+        (f) => `Email/notes -[informal_tip]-> ${f.assetName}`,
+      ),
+    };
+  },
+};
+
+export const ghostExpertTool: ToolDefinition = {
+  name: "ask_ghost_expert",
+  routingHint:
+    "- ask_ghost_expert: reconstruct what a specific engineer would advise using only their authored/fixed knowledge (\"what would Ramesh do\").",
+  schema: {
+    name: "ask_ghost_expert",
+    description:
+      "Answer using only one person's institutional memory subgraph.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        person_name: { type: "string" },
+        question: { type: "string" },
+      },
+      required: ["question"],
+    },
+  },
+  handler: async (input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const { person_name, question } = input as {
+      person_name?: string;
+      question?: string;
+    };
+    if (!question?.trim()) return { content: "Error: question required." };
+    const ans = askGhostExpert(
+      graph,
+      person_name?.trim() || "Ramesh Kumar",
+      question,
+    );
+    if (!ans) return { content: "Person not found." };
+    return {
+      content: [
+        `## Ghost Expert — ${ans.personName}`,
+        `**Confidence:** ${ans.confidence} (${ans.confidenceBreakdown.score}/100)`,
+        `_${ans.confidenceBreakdown.reasons.join("; ")}_`,
+        "",
+        ...ans.answerLines,
+        "",
+        "### Path",
+        ...ans.traversalPath.map((p) => `- ${p}`),
+      ].join("\n"),
+      knowledgeGraph: graph,
+      confidence: ans.confidence,
+      citations: ans.citations,
+      traversalPath: ans.traversalPath,
+    };
+  },
+};
+
+export const assetTimelineTool: ToolDefinition = {
+  name: "get_asset_timeline",
+  routingHint:
+    "- get_asset_timeline: Incident Time Machine — chronological failures and who fixed them for an asset.",
+  schema: {
+    name: "get_asset_timeline",
+    description: "Build a chronological incident timeline for an asset.",
+    input_schema: {
+      type: "object" as const,
+      properties: { asset_name: { type: "string" } },
+      required: ["asset_name"],
+    },
+  },
+  handler: async (input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const name = (input as { asset_name?: string }).asset_name?.trim() || "P-101";
+    const tl = buildAssetTimeline(graph, name);
+    if (!tl) return { content: `Asset "${name}" not found.` };
+    return {
+      content: [
+        `## Time Machine — ${tl.asset.name}`,
+        ...tl.events.map(
+          (e) =>
+            `### ${e.date} — ${e.title}\n${e.description}\nFixed by: ${e.people.join(", ") || "—"}\nPath: ${e.path.join(" → ")}`,
+        ),
+      ].join("\n\n"),
+      knowledgeGraph: graph,
+      confidence: "High",
+      traversalPath: tl.events.flatMap((e) => e.path),
+      citations: tl.events.flatMap((e) => e.sources),
+    };
+  },
+};
+
+export const failureTwinsTool: ToolDefinition = {
+  name: "find_failure_twins",
+  routingHint:
+    "- find_failure_twins: assets with similar failure fingerprints (shared parts/procedures/incident themes).",
+  schema: {
+    name: "find_failure_twins",
+    description: "Find assets with similar failure patterns to a seed asset.",
+    input_schema: {
+      type: "object" as const,
+      properties: { asset_name: { type: "string" } },
+      required: ["asset_name"],
+    },
+  },
+  handler: async (input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const name = (input as { asset_name?: string }).asset_name?.trim() || "P-101";
+    const twins = findFailureTwins(graph, name);
+    return {
+      content: [
+        `## Failure Twins of ${name}`,
+        ...twins.map((t) => `- **${t.assetName}** (score ${t.score}): ${t.narrative}`),
+        twins.length === 0 ? "No similar assets found." : "",
+      ].join("\n"),
+      knowledgeGraph: graph,
+      confidence: "Medium",
+      traversalPath: twins.map((t) => `${name} -[similar_failure]-> ${t.assetName}`),
+    };
+  },
+};
+
+export const coverageGapsTool: ToolDefinition = {
+  name: "get_coverage_gaps",
+  routingHint:
+    "- get_coverage_gaps: compliance gaps — assets missing experts, procedures, incidents, or parts BOM.",
+  schema: {
+    name: "get_coverage_gaps",
+    description: "List knowledge/compliance coverage gaps across assets.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  handler: async (_input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const gaps = findCoverageGaps(graph);
+    return {
+      content: [
+        "## Coverage Gaps",
+        ...gaps.map((g) => `- **${g.assetName}** [${g.severity}]: ${g.narrative}`),
+      ].join("\n"),
+      knowledgeGraph: graph,
+      confidence: "High",
+    };
+  },
+};
+
+export const healthScoreTool: ToolDefinition = {
+  name: "get_knowledge_health",
+  routingHint:
+    "- get_knowledge_health: plant-level Knowledge Health Score 0–100.",
+  schema: {
+    name: "get_knowledge_health",
+    description: "Compute plant knowledge health score and drivers.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  handler: async (_input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const intel = buildPlantIntelligence(graph);
+    return {
+      content: [
+        `## Knowledge Health — ${intel.health.score}/100 (grade ${intel.health.grade})`,
+        intel.health.summary,
+        "",
+        "### Drivers",
+        ...intel.health.drivers.map((d) => `- ${d.label}: ${d.impact > 0 ? "+" : ""}${d.impact}`),
+      ].join("\n"),
+      knowledgeGraph: graph,
+      riskReport: intel.riskReport,
+      confidence: "High",
+    };
+  },
+};
+
+export const shiftBriefTool: ToolDefinition = {
+  name: "get_shift_brief",
+  routingHint:
+    "- get_shift_brief: generate an overnight shift hand-off brief (risks + ask-before-leaving).",
+  schema: {
+    name: "get_shift_brief",
+    description: "Generate a shift hand-off brief for plant operations.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  handler: async (_input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const brief = buildShiftHandoff(graph);
+    return {
+      content: [
+        `## Shift Hand-off Brief`,
+        brief.summary,
+        "",
+        "### Open knowledge risks",
+        ...brief.openRisks.map((r) => `- ${r}`),
+        "",
+        "### Overnight watch",
+        ...brief.overnightWatch.map((r) => `- ${r}`),
+        "",
+        "### Ask before leaving",
+        ...brief.askBeforeLeaving.map((r) => `- ${r}`),
+      ].join("\n"),
+      knowledgeGraph: graph,
+      confidence: "High",
+    };
+  },
+};
+
+export const partsCascadeTool: ToolDefinition = {
+  name: "get_parts_cascade",
+  routingHint:
+    "- get_parts_cascade: if a spare is OOS, which assets and procedures break.",
+  schema: {
+    name: "get_parts_cascade",
+    description: "Parts stockout cascade across assets and procedures.",
+    input_schema: {
+      type: "object" as const,
+      properties: { part_name: { type: "string" } },
+      required: ["part_name"],
+    },
+  },
+  handler: async (input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const part =
+      (input as { part_name?: string }).part_name?.trim() || "SKF Bearing 6205";
+    const cascade = partsCascade(graph, part);
+    if (!cascade) return { content: `Part "${part}" not found.` };
+    return {
+      content: [
+        `## Parts Cascade — ${cascade.partName}`,
+        cascade.narrative,
+        "",
+        "### Assets",
+        ...cascade.impactedAssets.map((a) => `- ${a.name}`),
+        "",
+        "### Procedures",
+        ...cascade.impactedProcedures.map((p) => `- ${p.name}`),
+      ].join("\n"),
+      knowledgeGraph: graph,
+      confidence: "High",
+      traversalPath: cascade.impactedAssets.map(
+        (a) => `${cascade.partName} -[required_by]-> ${a.name}`,
+      ),
+    };
+  },
+};
+
+export const mentorshipTool: ToolDefinition = {
+  name: "get_mentorship_matches",
+  routingHint:
+    "- get_mentorship_matches: suggest mentor/mentee pairs to fix sole-expert assets.",
+  schema: {
+    name: "get_mentorship_matches",
+    description: "Suggest mentorship pairings for knowledge risk assets.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  handler: async (_input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const matches = suggestMentorship(graph);
+    return {
+      content: [
+        "## Mentorship Matching",
+        ...matches.map(
+          (m) =>
+            `- Pair **${m.mentorName}** → **${m.menteeName}** on ${m.assetName} (${m.weeksSuggested} weeks)\n  ${m.rationale}`,
+        ),
+      ].join("\n"),
+      knowledgeGraph: graph,
+      confidence: "High",
+    };
+  },
+};
+
+export const stalenessTool: ToolDefinition = {
+  name: "get_knowledge_debt",
+  routingHint:
+    "- get_knowledge_debt: stale nodes / knowledge debt older than recent years.",
+  schema: {
+    name: "get_knowledge_debt",
+    description: "List stale knowledge items (knowledge debt).",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  handler: async (_input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const items = detectStaleness(graph);
+    return {
+      content: [
+        "## Knowledge Debt / Staleness",
+        ...items.map((i) => `- **${i.nodeName}** (${i.nodeType}): ${i.narrative}`),
+      ].join("\n"),
+      knowledgeGraph: graph,
+      confidence: "Medium",
+    };
+  },
+};
+
+export const crossUnitTool: ToolDefinition = {
+  name: "get_cross_unit_transfer",
+  routingHint:
+    "- get_cross_unit_transfer: reuse solutions from another unit (e.g. Unit 2 → Unit 3).",
+  schema: {
+    name: "get_cross_unit_transfer",
+    description: "Suggest cross-unit knowledge transfers for a problem.",
+    input_schema: {
+      type: "object" as const,
+      properties: { problem: { type: "string" } },
+      required: ["problem"],
+    },
+  },
+  handler: async (input, ctx): Promise<ToolExecutorResult> => {
+    const graph = (await loadPlantGraph(ctx)) ?? graphFromCtx(ctx);
+    if (!graph?.nodes.length) return { content: "No knowledge graph loaded." };
+    const problem =
+      (input as { problem?: string }).problem?.trim() || "seal cavitation P-101";
+    const transfers = crossUnitTransfers(graph, problem);
+    return {
+      content: [
+        "## Cross-Unit Transfer",
+        ...transfers.map(
+          (t) =>
+            `- **${t.fromUnit} → ${t.toUnit}**: ${t.topic}\n  ${t.narrative}\n  Procedure: ${t.transferredProcedure}`,
+        ),
+      ].join("\n"),
+      knowledgeGraph: graph,
+      confidence: "Medium",
     };
   },
 };

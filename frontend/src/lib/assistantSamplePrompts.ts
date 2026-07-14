@@ -3,9 +3,10 @@ export type AssistantSamplePrompt = {
   prompt: string;
 };
 
-export const ASSISTANT_SAMPLE_PROMPTS: AssistantSamplePrompt[] = [
+/** Short curated list for plant workspace empty state. */
+export const ENGRAM_SAMPLE_PROMPTS: AssistantSamplePrompt[] = [
   {
-    label: "Ramesh retires",
+    label: "If Ramesh retires…",
     prompt:
       "If Ramesh retires tomorrow, which machines lose their only expert?",
   },
@@ -15,17 +16,16 @@ export const ASSISTANT_SAMPLE_PROMPTS: AssistantSamplePrompt[] = [
       "Why did Pump P-101 keep failing in 2019 and what did we do about it?",
   },
   {
-    label: "Knowledge risk radar",
+    label: "Quiet knowledge gaps",
     prompt:
-      "Show the Knowledge Risk Radar — which assets have single-point-of-failure expertise?",
+      "What repair knowledge on P-101 exists only in emails, not in SOPs?",
   },
   {
-    label: "Resolve P-101",
-    prompt: "What is P-101? Resolve the tag and show its related incidents and parts.",
-  },
-  {
-    label: "Load Unit 3 demo",
+    label: "Hinglish ask",
     prompt:
-      "Load the Bharat Engineering Works Unit 3 demo knowledge graph into this workspace.",
+      "P-101 mein seal dubara fail ho raha hai — pehle kya kiya tha?",
   },
 ];
+
+/** @deprecated Alias — same as Engram prompts. */
+export const ASSISTANT_SAMPLE_PROMPTS = ENGRAM_SAMPLE_PROMPTS;

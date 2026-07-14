@@ -34,6 +34,9 @@ export function useScreenerChat({
   );
   const [riskReport, setRiskReport] = useState<RiskReport | null>(null);
   const [isScreeningActive, setIsScreeningActive] = useState(false);
+  const [traversalPath, setTraversalPath] = useState<string[]>([]);
+  const [lastConfidence, setLastConfidence] = useState<string | null>(null);
+  const [lastCitations, setLastCitations] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const knowledgeGraphRef = useRef<KnowledgeGraph | null>(null);
   const riskReportRef = useRef<RiskReport | null>(null);
@@ -225,6 +228,14 @@ export function useScreenerChat({
             setRiskReport(report);
             riskReportRef.current = report;
           },
+
+          onEngramMeta: (meta) => {
+            if (meta.traversalPath?.length) {
+              setTraversalPath(meta.traversalPath);
+            }
+            if (meta.confidence) setLastConfidence(meta.confidence);
+            if (meta.citations?.length) setLastCitations(meta.citations);
+          },
         });
 
         const finalEvents: AssistantEvent[] = [
@@ -297,5 +308,9 @@ export function useScreenerChat({
     isScreeningActive,
     resetChat,
     seedDemo,
+    traversalPath,
+    setTraversalPath,
+    lastConfidence,
+    lastCitations,
   };
 }

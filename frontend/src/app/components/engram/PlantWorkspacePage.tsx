@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   Loader2,
   Pencil,
   Sparkles,
@@ -16,9 +17,10 @@ import { getStartup, renameStartup, type StartupRecord } from "@/lib/startupsApi
 import { useSidebar } from "@/app/contexts/SidebarContext";
 import { ResizeDivider } from "@/app/components/shared/ResizeDivider";
 import { useIsMobile } from "@/app/hooks/useIsMobile";
+import { ENGRAM_SAMPLE_PROMPTS } from "@/lib/assistantSamplePrompts";
 
-const CHAT_PANEL_MIN = 320;
-const CHAT_PANEL_DEFAULT = 480;
+const CHAT_PANEL_MIN = 340;
+const CHAT_PANEL_DEFAULT = 400;
 
 interface Props {
   startupId: string;
@@ -29,6 +31,7 @@ export function PlantWorkspacePage({ startupId }: Props) {
   const { setSidebarOpen } = useSidebar();
   const isMobile = useIsMobile();
   const splitRef = useRef<HTMLDivElement>(null);
+  const tryMenuRef = useRef<HTMLDivElement>(null);
 
   const [plant, setPlant] = useState<StartupRecord | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
@@ -40,6 +43,8 @@ export function PlantWorkspacePage({ startupId }: Props) {
   const [seedError, setSeedError] = useState<string | null>(null);
   const [chatPanelWidth, setChatPanelWidth] = useState(CHAT_PANEL_DEFAULT);
   const [mobilePane, setMobilePane] = useState<"chat" | "analysis">("chat");
+  const [warRoomAssetId, setWarRoomAssetId] = useState<string | null>(null);
+  const [tryOpen, setTryOpen] = useState(false);
 
   const {
     messages,
@@ -47,9 +52,13 @@ export function PlantWorkspacePage({ startupId }: Props) {
     handleChat,
     cancel,
     knowledgeGraph,
+    setKnowledgeGraph,
     riskReport,
+    setRiskReport,
     isScreeningActive,
     seedDemo,
+    traversalPath,
+    setTraversalPath,
   } = useScreenerChat({ startupId });
 
   useEffect(() => {
@@ -63,18 +72,24 @@ export function PlantWorkspacePage({ startupId }: Props) {
       .then((s) => {
         setPlant(s);
         setNameInput(s.name as string);
-        if (s.knowledgeGraph?.nodes?.length) {
-          // Hydrated via useScreenerChat fetch as well
-        }
       })
       .catch(() => setPageError("Failed to load plant."))
       .finally(() => setPageLoading(false));
   }, [startupId]);
 
+  useEffect(() => {
+    if (!tryOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!tryMenuRef.current?.contains(e.target as Node)) setTryOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [tryOpen]);
+
   const onChatPanelDividerDrag = useCallback((delta: number) => {
     setChatPanelWidth((w) => {
       const next = w + delta;
-      const max = (splitRef.current?.clientWidth ?? 1200) - 400;
+      const max = (splitRef.current?.clientWidth ?? 1200) - 420;
       return Math.min(max, Math.max(CHAT_PANEL_MIN, next));
     });
   }, []);
@@ -121,14 +136,15 @@ export function PlantWorkspacePage({ startupId }: Props) {
   }
 
   function sendPrompt(text: string) {
+    setTryOpen(false);
     void handleChat({ role: "user", content: text });
     if (isMobile) setMobilePane("chat");
   }
 
   if (pageLoading) {
     return (
-      <div className="flex h-full items-center justify-center text-slate-500">
-        <Loader2 className="h-6 w-6 animate-spin" />
+      <div className="flex h-full items-center justify-center text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
   }
@@ -151,102 +167,117 @@ export function PlantWorkspacePage({ startupId }: Props) {
   const hasGraph = !!(knowledgeGraph?.nodes?.length);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <header className="shrink-0 border-b border-slate-200 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.push("/startups")}
-            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Plants
-          </button>
+    <div className="flex h-full min-h-0 flex-col bg-[#fafafa]">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white px-4">
+        <button
+          type="button"
+          onClick={() => router.push("/startups")}
+          className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="hidden sm:inline">Plants</span>
+        </button>
 
-          {editingName ? (
-            <div className="flex items-center gap-2">
-              <input
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void saveName();
-                  if (e.key === "Escape") setEditingName(false);
-                }}
-                className="rounded-md border border-slate-300 px-2 py-1 text-sm font-semibold"
-              />
-              <button
-                type="button"
-                disabled={savingName}
-                onClick={() => void saveName()}
-                className="rounded-md bg-slate-900 p-1.5 text-white"
-              >
-                <Check className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
+        <div className="h-4 w-px bg-slate-200" />
+
+        {editingName ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <input
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void saveName();
+                if (e.key === "Escape") setEditingName(false);
+              }}
+              className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-sm font-medium"
+              autoFocus
+            />
             <button
               type="button"
-              onClick={() => setEditingName(true)}
-              className="group inline-flex items-center gap-1.5 text-left"
+              disabled={savingName}
+              onClick={() => void saveName()}
+              className="rounded-md bg-slate-900 p-1.5 text-white"
             >
-              <h1 className="text-base font-semibold text-slate-900">
-                {plant.name}
-              </h1>
-              <Pencil className="h-3.5 w-3.5 text-slate-300 group-hover:text-slate-500" />
+              <Check className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingName(true)}
+            className="group flex min-w-0 flex-1 items-center gap-1.5 text-left"
+          >
+            <h1 className="truncate text-sm font-medium text-slate-900">
+              {plant.name}
+            </h1>
+            <Pencil className="h-3 w-3 shrink-0 text-slate-300 opacity-0 group-hover:opacity-100" />
+          </button>
+        )}
+
+        <div className="flex items-center gap-1.5">
+          {warRoomAssetId && (
+            <button
+              type="button"
+              onClick={() => setWarRoomAssetId(null)}
+              className="rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+            >
+              Clear focus
             </button>
           )}
 
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            {!hasGraph && (
+          {hasGraph && (
+            <div ref={tryMenuRef} className="relative">
               <button
                 type="button"
-                onClick={() => void handleLoadDemo()}
-                disabled={seeding}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                onClick={() => setTryOpen((v) => !v)}
+                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
               >
-                {seeding ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                Load Unit 3 demo
+                Try
+                <ChevronDown className="h-3 w-3" />
               </button>
-            )}
-            {hasGraph && (
-              <>
-                <button
-                  type="button"
-                  onClick={() =>
-                    sendPrompt(
-                      "If Ramesh retires tomorrow, which machines lose their only expert?",
-                    )
-                  }
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Wow query
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    sendPrompt(
-                      "Why did Pump P-101 keep failing in 2019 and what did we do about it?",
-                    )
-                  }
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  P-101 history
-                </button>
-              </>
-            )}
-          </div>
+              {tryOpen && (
+                <div className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                  {ENGRAM_SAMPLE_PROMPTS.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => sendPrompt(p.prompt)}
+                      className="block w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!hasGraph && (
+            <button
+              type="button"
+              onClick={() => void handleLoadDemo()}
+              disabled={seeding}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {seeding ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              Load demo
+            </button>
+          )}
         </div>
-        {seedError && (
-          <p className="mt-2 text-xs text-red-600">{seedError}</p>
-        )}
       </header>
 
+      {seedError && (
+        <p className="border-b border-red-100 bg-red-50 px-4 py-1.5 text-xs text-red-600">
+          {seedError}
+        </p>
+      )}
+
       {isMobile && (
-        <div className="flex shrink-0 border-b border-slate-200 bg-slate-50 md:hidden">
+        <div className="flex shrink-0 border-b border-slate-200 bg-white md:hidden">
           {(["chat", "analysis"] as const).map((pane) => (
             <button
               key={pane}
@@ -254,11 +285,11 @@ export function PlantWorkspacePage({ startupId }: Props) {
               onClick={() => setMobilePane(pane)}
               className={`flex-1 py-2.5 text-sm font-medium ${
                 mobilePane === pane
-                  ? "border-b-2 border-slate-900 bg-white text-slate-900"
-                  : "text-slate-500"
+                  ? "border-b-2 border-slate-900 text-slate-900"
+                  : "text-slate-400"
               }`}
             >
-              {pane === "chat" ? "Copilot" : "Graph / Risk"}
+              {pane === "chat" ? "Ask" : "Explore"}
             </button>
           ))}
         </div>
@@ -267,7 +298,7 @@ export function PlantWorkspacePage({ startupId }: Props) {
       <div ref={splitRef} className="flex min-h-0 flex-1 flex-col md:flex-row">
         <section
           style={isMobile ? undefined : { width: chatPanelWidth }}
-          className={`flex min-h-0 w-full shrink-0 flex-col md:w-auto md:flex-none ${
+          className={`flex min-h-0 w-full shrink-0 flex-col border-r border-slate-200/80 bg-white md:w-auto md:flex-none ${
             isMobile && mobilePane !== "chat" ? "hidden" : ""
           }`}
         >
@@ -286,7 +317,7 @@ export function PlantWorkspacePage({ startupId }: Props) {
         </div>
 
         <section
-          className={`flex min-h-0 min-w-0 flex-1 flex-col ${
+          className={`flex min-h-0 min-w-0 flex-1 flex-col bg-[#f7f7f5] ${
             isMobile && mobilePane !== "analysis" ? "hidden" : ""
           }`}
         >
@@ -296,6 +327,14 @@ export function PlantWorkspacePage({ startupId }: Props) {
             loading={isScreeningActive || seeding}
             plantName={plant.name}
             startupId={startupId}
+            highlightPath={traversalPath}
+            warRoomAssetId={warRoomAssetId}
+            onPathChange={setTraversalPath}
+            onWarRoomAsset={(id) => setWarRoomAssetId(id)}
+            onGraphChange={(g, r) => {
+              setKnowledgeGraph(g);
+              if (r) setRiskReport(r);
+            }}
           />
         </section>
       </div>

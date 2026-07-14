@@ -149,6 +149,7 @@ export function buildDemoKnowledgeGraph(): KnowledgeGraph {
       type: "Document",
       description: "Informal troubleshooting threads not captured in DMS",
       sources: ["Email_Archive_Ramesh_2020.txt"],
+      metadata: { informal: true },
     },
 
     // Procedures (3)

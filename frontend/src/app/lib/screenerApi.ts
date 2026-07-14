@@ -212,6 +212,159 @@ export async function ingestPlantText(
   }>;
 }
 
+async function readIngestSse(
+  resp: Response,
+  onProgress?: (event: Record<string, unknown>) => void,
+): Promise<{ knowledgeGraph: KnowledgeGraph; riskReport: RiskReport }> {
+  const reader = resp.body?.getReader();
+  if (!reader) throw new Error("No response body");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalGraph: KnowledgeGraph | null = null;
+  let finalRisk: RiskReport | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const event = JSON.parse(line.slice(6)) as Record<string, unknown>;
+        if (event.type === "ingest_progress") onProgress?.(event);
+        if (event.type === "final_result") {
+          finalGraph = event.knowledgeGraph as KnowledgeGraph;
+          finalRisk = event.riskReport as RiskReport;
+        }
+        if (event.type === "error") {
+          throw new Error(String(event.detail ?? "Ingest failed"));
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;
+        throw e;
+      }
+    }
+  }
+  if (!finalGraph) throw new Error("Ingest finished without graph");
+  return {
+    knowledgeGraph: finalGraph,
+    riskReport: finalRisk ?? {
+      atRiskAssets: [],
+      generatedAt: null,
+      summary: "",
+    },
+  };
+}
+
+export async function ingestPlantTextStreaming(
+  plantId: string,
+  text: string,
+  filename: string,
+  onProgress?: (event: Record<string, unknown>) => void,
+): Promise<{ knowledgeGraph: KnowledgeGraph; riskReport: RiskReport }> {
+  const authHeaders = await getAuthHeaders();
+  const resp = await fetch(
+    `${API_BASE}/api/startups/${plantId}/ingest?stream=1`,
+    {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({ text, filename }),
+    },
+  );
+  if (!resp.ok) {
+    const err = (await resp.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Ingest failed (${resp.status})`);
+  }
+  return readIngestSse(resp, onProgress);
+}
+
+export async function ingestPlantFileStreaming(
+  plantId: string,
+  file: File,
+  onProgress?: (event: Record<string, unknown>) => void,
+): Promise<{ knowledgeGraph: KnowledgeGraph; riskReport: RiskReport }> {
+  const authHeaders = await getAuthHeaders();
+  const form = new FormData();
+  form.append("file", file);
+  const resp = await fetch(
+    `${API_BASE}/api/startups/${plantId}/ingest?stream=1`,
+    {
+      method: "POST",
+      headers: { ...authHeaders, Accept: "text/event-stream" },
+      body: form,
+    },
+  );
+  if (!resp.ok) {
+    const err = (await resp.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Ingest failed (${resp.status})`);
+  }
+  return readIngestSse(resp, onProgress);
+}
+
+export async function fetchPlantIntelligence(
+  plantId: string,
+  person = "Ramesh Kumar",
+  asset = "Pump P-101",
+): Promise<{ intelligence: import("@/lib/engramTypes").PlantIntelligence | null }> {
+  const authHeaders = await getAuthHeaders();
+  const qs = new URLSearchParams({ person, asset });
+  const resp = await fetch(
+    `${API_BASE}/api/startups/${plantId}/intelligence?${qs}`,
+    { headers: authHeaders },
+  );
+  if (!resp.ok) throw new Error(`Intelligence failed (${resp.status})`);
+  return resp.json();
+}
+
+export async function confirmPlantEdge(
+  plantId: string,
+  edgeId: string,
+  confirmed: boolean,
+): Promise<{ knowledgeGraph: KnowledgeGraph; riskReport: RiskReport }> {
+  const authHeaders = await getAuthHeaders();
+  const resp = await fetch(
+    `${API_BASE}/api/startups/${plantId}/edges/${encodeURIComponent(edgeId)}/confirm`,
+    {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmed }),
+    },
+  );
+  if (!resp.ok) {
+    const err = (await resp.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Confirm failed (${resp.status})`);
+  }
+  return resp.json();
+}
+
+export async function ingestVoiceNote(
+  plantId: string,
+  transcript: string,
+): Promise<{
+  knowledgeGraph: KnowledgeGraph;
+  riskReport: RiskReport;
+  addedNodes: number;
+  addedEdges: number;
+}> {
+  const authHeaders = await getAuthHeaders();
+  const resp = await fetch(`${API_BASE}/api/startups/${plantId}/voice`, {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript }),
+  });
+  if (!resp.ok) {
+    const err = (await resp.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Voice ingest failed (${resp.status})`);
+  }
+  return resp.json();
+}
+
 /** Legacy — kept for any remaining callers. */
 export async function screenCapTable(
   _file: File,
@@ -228,6 +381,18 @@ export const TOOL_LABELS: Record<string, string> = {
   traverse_graph: "Walking knowledge graph",
   ask_knowledge: "Querying plant knowledge",
   get_knowledge_risk: "Running Knowledge Risk Radar",
+  get_succession_plan: "Building succession plan",
+  get_quiet_knowledge: "Detecting quiet knowledge",
+  ask_ghost_expert: "Consulting ghost expert",
+  get_asset_timeline: "Opening incident time machine",
+  find_failure_twins: "Finding failure twins",
+  get_coverage_gaps: "Scanning coverage gaps",
+  get_knowledge_health: "Scoring knowledge health",
+  get_shift_brief: "Drafting shift hand-off",
+  get_parts_cascade: "Tracing parts cascade",
+  get_mentorship_matches: "Matching mentors",
+  get_knowledge_debt: "Measuring knowledge debt",
+  get_cross_unit_transfer: "Checking cross-unit transfer",
   list_startup_documents: "Listing plant documents",
   search_startup_documents: "Searching plant documents",
   web_search: "Searching the web…",
