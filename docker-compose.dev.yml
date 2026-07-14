@@ -1,0 +1,25 @@
+# Local Engram deps for host-based `pnpm dev` (backend + frontend on host).
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   pnpm dev
+#
+# Provides MongoDB so you do not need Atlas for local demos.
+# Point root `.env`: MONGODB_URI=mongodb://127.0.0.1:27017/engram
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - engram_mongo_dev:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+volumes:
+  engram_mongo_dev:

@@ -1,0 +1,25 @@
+# SOP — Impeller Replacement v3.2
+**Equipment:** Kirloskar KDS-550 / Pump P-101 class  
+**Authored by:** Ramesh Kumar  
+**Reviewed by:** Anand Mehta, Plant Manager  
+**Effective:** April 2019
+
+## Purpose
+Safe removal and installation of impeller and mechanical seal on Unit 3 feed water pumps.
+
+## Prerequisites
+- LOTO completed
+- Mechanical Seal Type-A kit available
+- KDS-550 Impeller in stores
+- SKF Bearing 6205 if drive-end work is scheduled
+
+## Steps
+1. Drain casing and isolate suction/discharge valves (Control Valve V-44 upstream).
+2. Remove coupling insert and housing.
+3. Extract impeller; inspect for cavitation pitting.
+4. Install new impeller; torque per OEM manual XR-22 (Kirloskar KDS-550).
+5. Fit Mechanical Seal Type-A per manufacturer gap specs.
+6. Reassemble, prime, and bump-test under supervision of Sr. Maintenance Engineer.
+
+## Related incidents
+Seal failure March 2019 (Pump P-101) — cavitation root cause.

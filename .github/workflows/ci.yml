@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs for the same ref when a newer push arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: "10.6.5"
+  NODE_VERSION: "22"
+
+# ─── Job 1: Typecheck + Lint ──────────────────────────────────────────────────
+# Fast gate — both checks share one install; either failure blocks the build jobs.
+jobs:
+  quality:
+    name: Typecheck & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Backend — typecheck
+        run: pnpm --filter vc-screener-backend run typecheck
+
+      - name: Frontend — lint
+        run: pnpm --filter rtp-global run lint
+
+# ─── Job 2a: Backend build ────────────────────────────────────────────────────
+  build-backend:
+    name: Build (backend)
+    needs: quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Backend — build
+        run: pnpm --filter vc-screener-backend run build
+
+# ─── Job 2b: Frontend build ───────────────────────────────────────────────────
+  build-frontend:
+    name: Build (frontend)
+    needs: quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend — build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: pnpm --filter rtp-global run build
+
+# ─── Job 3: Tests (placeholder) ───────────────────────────────────────────────
+# Uncomment and fill in once a test runner is wired up.
+# tests:
+#   name: Tests
+#   needs: quality
+#   runs-on: ubuntu-latest
+#   steps:
+#     - uses: actions/checkout@v4
+#     - uses: pnpm/action-setup@v4
+#       with:
+#         version: ${{ env.PNPM_VERSION }}
+#     - uses: actions/setup-node@v4
+#       with:
+#         node-version: ${{ env.NODE_VERSION }}
+#         cache: pnpm
+#     - run: pnpm install --frozen-lockfile
+#     - name: Backend — unit tests
+#       run: pnpm --filter vc-screener-backend run test
+#     - name: Frontend — unit tests
+#       run: pnpm --filter rtp-global run test

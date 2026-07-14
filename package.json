@@ -1,0 +1,26 @@
+{
+  "name": "rtp-global-vc-screener",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.6.5",
+  "scripts": {
+    "prepare": "husky",
+    "clean": "rm -rf node_modules backend/node_modules frontend/node_modules backend/dist frontend/.next frontend/out frontend/.open-next coverage '**/*.tsbuildinfo' backend/package-lock.json frontend/package-lock.json backend/bun.lock frontend/bun.lock",
+    "dev": "pnpm --parallel --filter vc-screener-backend --filter rtp-global run dev",
+    "build": "pnpm --filter vc-screener-backend run build && pnpm --filter rtp-global run build",
+    "typecheck": "pnpm --filter vc-screener-backend run typecheck",
+    "lint": "pnpm --filter rtp-global run lint"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@openrouter/sdk",
+      "esbuild",
+      "sharp",
+      "unrs-resolver",
+      "workerd"
+    ]
+  }
+}

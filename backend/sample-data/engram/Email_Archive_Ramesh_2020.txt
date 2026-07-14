@@ -1,0 +1,26 @@
+From: Ramesh Kumar <ramesh.kumar@bew-pune.example>
+To: Shift Team
+Date: 22 Jun 2020
+Subject: P-101 vibration — don't chase bearing first
+
+Team — if P-101 shows high vibration during monsoon load swings, check suction strainer and NPSH before tearing into the bearing. Same pattern as early 2019 before the seal failure. I've seen this three times now; nothing in the DMS covers the informal check list.
+
+— Ramesh
+
+---
+
+From: Ramesh Kumar <ramesh.kumar@bew-pune.example>
+To: Priya Singh
+Date: 11 Jan 2022
+Subject: Re: Boiler B-7 trip
+
+Priya — glad you caught the low-water trip on B-7. I'll join for the walkdown. Between us we have coverage on the boiler; the feed pumps are still mostly on me until we cross-train.
+
+---
+
+From: Ramesh Kumar <ramesh.kumar@bew-pune.example>
+To: Anand Mehta
+Date: 3 Mar 2020
+Subject: Knowledge transfer — Unit 3
+
+Anand — when I take leave, only Priya can cover B-7 with me. Nobody else has touched P-101 seal/cavitation or C-3 bearing work since 2019/2021. We should schedule pairing shifts.

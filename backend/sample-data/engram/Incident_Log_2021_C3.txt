@@ -1,0 +1,18 @@
+# Incident Log — Compressor C-3
+**Date:** 9 August 2021  
+**Asset:** Compressor C-3  
+**Author / Fixed by:** Ramesh Kumar  
+
+## Event
+Drive-end bearing seizure on Compressor C-3. High temperature alarm then shaft lock.
+
+## Cause
+Lubrication starvation; same SKF Bearing 6205 family as used on Pump P-101.
+
+## Actions
+- Replaced SKF Bearing 6205
+- Replaced Coupling insert C-3
+- Documented Bearing change-out procedure for C-3 class compressors
+
+## Notes
+Ramesh is the only engineer with hands-on experience of this 2021 failure on C-3.

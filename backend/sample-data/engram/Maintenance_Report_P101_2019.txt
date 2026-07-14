@@ -1,0 +1,29 @@
+# Maintenance Report #2341
+**Bharat Engineering Works, Pune — Unit 3 (Cooling Water Circuit)**  
+**Asset:** Pump P-101 (Kirloskar KDS-550 centrifugal feed water pump)  
+**Date:** 14 March 2019  
+**Author:** Ramesh Kumar, Sr. Maintenance Engineer  
+**Reviewed by:** Anand Mehta, Plant Manager
+
+## Incident
+Mechanical seal failure on Pump P-101 during night shift. Operators reported unusual vibration, then seal leakage into the drip tray.
+
+## Root cause
+Cavitation due to partially clogged suction strainer and low NPSH during monsoon load swing. Secondary damage to impeller vanes.
+
+## Resolution
+1. Isolated P-101 and locked out.
+2. Replaced impeller (KDS-550 Impeller).
+3. Upgraded to Mechanical Seal Type-A.
+4. Replaced SKF Bearing 6205 on drive end as precaution.
+5. Cleaned suction strainer element.
+
+## Outcome
+Pump returned to service 16 March 2019. Ramesh Kumar authored follow-up SOP for impeller replacement.
+
+## Parts used
+- SKF Bearing 6205
+- Mechanical Seal Type-A
+- KDS-550 Impeller
+- O-ring set (Viton)
+- Gasket kit P-101

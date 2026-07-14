@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+
+# Next.js build output
+.next
+out
+
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Cloudflare / OpenNext
+.open-next
+.vercel
+cloudflare-env.d.ts
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# OS
+.DS_Store

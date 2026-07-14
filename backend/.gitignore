@@ -1,0 +1,15 @@
+node_modules
+dist
+
+.env*
+!.env.example
+
+*.log
+pnpm-debug.log*
+logs/
+
+*.tsbuildinfo
+
+.DS_Store
+storage/jwtRS256.key
+storage/jwtRS256.key.pub

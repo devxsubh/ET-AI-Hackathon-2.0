@@ -1,0 +1,39 @@
+# Dependencies (re-installed inside the image)
+node_modules
+backend/node_modules
+frontend/node_modules
+
+# Build outputs
+backend/dist
+frontend/.next
+frontend/out
+frontend/.open-next
+**/*.tsbuildinfo
+
+# Secrets — never bake into the image
+.env
+.env.*
+!.env.example
+
+# Frontend source is not needed for the backend image
+frontend/src
+frontend/public
+
+# Git / CI / IDE
+.git
+.github
+.cursor
+.claude
+**/*.log
+.DS_Store
+coverage
+
+# Keep README for image docs; skip heavy docs
+docs
+*.md
+!README.md
+!PRD.md
+
+# Large local artefacts
+**/.turbo
+**/playwright-report

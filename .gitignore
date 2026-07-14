@@ -1,0 +1,36 @@
+# Dependencies
+node_modules
+package-lock.json
+bun.lock
+bun.lockb
+yarn.lock
+pnpm-debug.log*
+
+# Build outputs
+dist
+out
+build
+.next
+.open-next
+
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Logs & debug
+*.log
+pnpm-debug.log*
+.claude/logs/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# OS / editor
+.DS_Store
+.vercel
+
+# Test coverage
+coverage

@@ -1,0 +1,51 @@
+# Production compose — Engram API on EC2 / any Docker host.
+# External services (MongoDB Atlas, optional Upstash Redis, Resend, R2, Anthropic)
+# come from `.env.production`. No Watchman / sanctions sidecar.
+#
+# Local backend-only stack (optional Mongo):
+#   docker compose -f docker-compose.dev.yml up
+#
+# Production:
+#   cp .env.example .env.production   # fill secrets
+#   docker compose --env-file .env.production up -d --build
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - path: .env.production
+        required: true
+    environment:
+      NODE_ENV: production
+      # Behind ALB / nginx — one hop.
+      TRUST_PROXY_HOPS: "1"
+      # Persist uploaded / parsed docs if using local disk (optional).
+      ENGRAM_UPLOAD_DIR: /app/uploads
+    volumes:
+      - engram_uploads:/app/uploads
+    networks:
+      - internal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3001/health',r=>r.statusCode===200?process.exit(0):process.exit(1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  engram_uploads:
