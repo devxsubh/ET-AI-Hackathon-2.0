@@ -345,6 +345,27 @@ export async function uploadRagDocument(
   return resp.json() as Promise<RagDocumentRecord>;
 }
 
+export async function uploadRagDocumentFromUrl(
+  startupId: string,
+  url: string,
+  filename?: string,
+): Promise<RagDocumentRecord> {
+  const authHeaders = await getAuthHeaders();
+  const resp = await fetch(
+    `${API_BASE}/api/startups/${startupId}/rag-documents/from-url`,
+    {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ url, filename }),
+    },
+  );
+  if (!resp.ok) {
+    const err = (await resp.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Upload failed (${resp.status})`);
+  }
+  return resp.json() as Promise<RagDocumentRecord>;
+}
+
 export const deleteRagDocument = (startupId: string, docId: string) =>
   api<void>(`/api/startups/${startupId}/rag-documents/${docId}`, {
     method: "DELETE",

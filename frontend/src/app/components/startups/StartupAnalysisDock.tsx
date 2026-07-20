@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
   FileUp,
+  Link2,
   Loader2,
   Mic,
   Network,
@@ -15,13 +16,19 @@ import {
 import { KnowledgeGraphView } from "@/app/components/engram/KnowledgeGraphView";
 import { RiskRadarPanel } from "@/app/components/engram/RiskRadarPanel";
 import { IntelligencePanel } from "@/app/components/engram/IntelligencePanel";
+import { GoogleDriveIcon } from "@/app/components/icons/GoogleDriveIcon";
 import {
   confirmPlantEdge,
   fetchPlantIntelligence,
   ingestPlantFileStreaming,
   ingestPlantTextStreaming,
+  ingestPlantUrlStreaming,
   ingestVoiceNote,
 } from "@/app/lib/screenerApi";
+import {
+  isGoogleDrivePickerConfigured,
+  pickGoogleDriveFiles,
+} from "@/lib/googleDrivePicker";
 import type {
   EngramEdge,
   EngramNode,
@@ -70,6 +77,8 @@ export function StartupAnalysisDock({
   const [intelLoading, setIntelLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [linkMode, setLinkMode] = useState<"drive" | "url" | null>(null);
+  const [urlValue, setUrlValue] = useState("");
   const [voiceText, setVoiceText] = useState(
     "P-101 mein seal dubara fail ho raha hai — strainer check kiya.",
   );
@@ -148,6 +157,38 @@ export function StartupAnalysisDock({
     }
   }
 
+  async function onDriveClick() {
+    setAddOpen(false);
+    setVoiceOpen(false);
+    if (!startupId) return;
+
+    if (!isGoogleDrivePickerConfigured()) {
+      setLinkMode("drive");
+      setUrlValue("");
+      setStatus("Paste a Drive share link, or set Google Picker env vars");
+      return;
+    }
+
+    setStatus("Opening Google Drive…");
+    try {
+      const files = await pickGoogleDriveFiles();
+      if (!files.length) {
+        setStatus(null);
+        return;
+      }
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]!;
+        setStatus(`Importing ${i + 1}/${files.length}: ${file.name}`);
+        await runIngest(new Set(), () =>
+          ingestPlantFileStreaming(startupId, file),
+        );
+      }
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Drive import failed");
+      setLinkMode("drive");
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
@@ -202,7 +243,28 @@ export function StartupAnalysisDock({
             <span className="text-[11px] text-slate-400">{status}</span>
           )}
           {startupId && (
-            <div ref={addRef} className="relative">
+            <>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void onDriveClick()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                title="Import from Google Drive"
+              >
+                <GoogleDriveIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Drive</span>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => fileRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                title="Upload document"
+              >
+                <FileUp className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Upload</span>
+              </button>
+              <div ref={addRef} className="relative">
               <button
                 type="button"
                 disabled={busy}
@@ -217,13 +279,33 @@ export function StartupAnalysisDock({
                 Add
               </button>
               {addOpen && (
-                <div className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                <div className="absolute right-0 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                   <button
                     type="button"
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
                     onClick={() => fileRef.current?.click()}
                   >
-                    <FileUp className="h-3.5 w-3.5" /> Upload document
+                    <FileUp className="h-3.5 w-3.5 shrink-0" /> Upload document
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                    onClick={() => void onDriveClick()}
+                  >
+                    <GoogleDriveIcon className="h-3.5 w-3.5 shrink-0" />
+                    Google Drive
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                    onClick={() => {
+                      setAddOpen(false);
+                      setVoiceOpen(false);
+                      setLinkMode("url");
+                      setUrlValue("");
+                    }}
+                  >
+                    <Link2 className="h-3.5 w-3.5 shrink-0" /> From URL
                   </button>
                   <button
                     type="button"
@@ -238,17 +320,18 @@ export function StartupAnalysisDock({
                       )
                     }
                   >
-                    <Sparkles className="h-3.5 w-3.5" /> Demo field note
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" /> Demo field note
                   </button>
                   <button
                     type="button"
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
                     onClick={() => {
                       setAddOpen(false);
+                      setLinkMode(null);
                       setVoiceOpen(true);
                     }}
                   >
-                    <Mic className="h-3.5 w-3.5" /> Voice note
+                    <Mic className="h-3.5 w-3.5 shrink-0" /> Voice note
                   </button>
                 </div>
               )}
@@ -267,9 +350,72 @@ export function StartupAnalysisDock({
                 }}
               />
             </div>
+            </>
           )}
         </div>
       </div>
+
+      {linkMode && startupId && (
+        <div className="border-b border-slate-200 bg-white px-3 py-2">
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-700">
+            {linkMode === "drive" ? (
+              <>
+                <GoogleDriveIcon className="h-3.5 w-3.5" />
+                Google Drive
+              </>
+            ) : (
+              <>
+                <Link2 className="h-3.5 w-3.5 text-slate-400" />
+                Document URL
+              </>
+            )}
+          </div>
+          <input
+            type="url"
+            value={urlValue}
+            onChange={(e) => setUrlValue(e.target.value)}
+            placeholder={
+              linkMode === "drive"
+                ? "Paste Drive share link (Anyone with the link)"
+                : "https://… PDF, DOCX, TXT"
+            }
+            className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+          />
+          {linkMode === "drive" && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Share as Viewer → Anyone with the link, then paste here.
+            </p>
+          )}
+          <div className="mt-1.5 flex gap-2">
+            <button
+              type="button"
+              disabled={busy || !urlValue.trim()}
+              onClick={() => {
+                const url = urlValue.trim();
+                void runIngest(new Set(), () =>
+                  ingestPlantUrlStreaming(startupId, url),
+                ).then(() => {
+                  setLinkMode(null);
+                  setUrlValue("");
+                });
+              }}
+              className="rounded-md bg-slate-900 px-2.5 py-1 text-xs text-white disabled:opacity-50"
+            >
+              {linkMode === "drive" ? "Ingest Drive link" : "Ingest URL"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLinkMode(null);
+                setUrlValue("");
+              }}
+              className="rounded-md px-2.5 py-1 text-xs text-slate-500"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {voiceOpen && startupId && (
         <div className="border-b border-slate-200 bg-white px-3 py-2">
@@ -344,8 +490,8 @@ export function StartupAnalysisDock({
               {plantName ?? "Plant"} has no graph yet
             </p>
             <p className="max-w-[260px] text-sm text-slate-500">
-              Load the Unit 3 demo from the header, or use Add to upload a
-              document.
+              Load the Unit 3 demo from the header, or use Add → Upload /
+              Google Drive link.
             </p>
           </div>
         ) : tab === "graph" ? (

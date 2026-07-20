@@ -89,6 +89,70 @@ singleDocumentsRouter.post("/", upload.single("file"), async (req, res) => {
   }
 });
 
+/** POST /single-documents/from-url — fetch Drive/public URL and store like an upload */
+singleDocumentsRouter.post("/from-url", async (req, res) => {
+  if (!r2Configured()) {
+    res.status(503).json({ detail: "Object storage is not configured" });
+    return;
+  }
+  const identity = authIdentityOr500(res);
+  if (!identity) return;
+
+  const body = req.body as { url?: string; filename?: string };
+  const url = body.url?.trim();
+  if (!url) {
+    res.status(400).json({ detail: "url is required" });
+    return;
+  }
+
+  try {
+    const { fetchRemoteDocument } = await import(
+      "../../lib/engram/fetchRemoteDocument"
+    );
+    const remote = await fetchRemoteDocument(url);
+    const filename = body.filename?.trim() || remote.filename;
+    const mimeType = remote.mimeType || "application/octet-stream";
+
+    const doc = await StoredDocument.create({
+      ownerId: identity.userId,
+      projectId: null,
+      filename,
+      mimeType,
+      fileType: detectFileType(filename, mimeType),
+      storageKey: "pending",
+      sizeBytes: remote.buffer.length,
+      status: "ready",
+    });
+
+    const storageKey = buildUserDocumentKey({
+      userId: identity.userId,
+      docId: doc._id.toString(),
+      filename,
+    });
+
+    try {
+      await uploadObject({
+        key: storageKey,
+        body: remote.buffer,
+        contentType: mimeType,
+      });
+      doc.storageKey = storageKey;
+      await doc.save();
+      res
+        .status(201)
+        .json(toRtpDocument(doc.toObject() as Record<string, unknown>));
+    } catch (err) {
+      await doc.deleteOne();
+      const detail = err instanceof Error ? err.message : "Upload failed";
+      res.status(500).json({ detail });
+    }
+  } catch (err) {
+    res.status(400).json({
+      detail: err instanceof Error ? err.message : "Failed to fetch URL",
+    });
+  }
+});
+
 singleDocumentsRouter.get("/:docId/url", async (req, res) => {
   const userId = res.locals.userId as string;
   const doc = (await StoredDocument.findOne({

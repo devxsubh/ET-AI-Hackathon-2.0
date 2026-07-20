@@ -307,6 +307,32 @@ export async function ingestPlantFileStreaming(
   return readIngestSse(resp, onProgress);
 }
 
+export async function ingestPlantUrlStreaming(
+  plantId: string,
+  url: string,
+  filename?: string,
+  onProgress?: (event: Record<string, unknown>) => void,
+): Promise<{ knowledgeGraph: KnowledgeGraph; riskReport: RiskReport }> {
+  const authHeaders = await getAuthHeaders();
+  const resp = await fetch(
+    `${API_BASE}/api/startups/${plantId}/ingest?stream=1`,
+    {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({ url, filename }),
+    },
+  );
+  if (!resp.ok) {
+    const err = (await resp.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Ingest failed (${resp.status})`);
+  }
+  return readIngestSse(resp, onProgress);
+}
+
 export async function fetchPlantIntelligence(
   plantId: string,
   person = "Ramesh Kumar",

@@ -125,6 +125,99 @@ ragDocumentsRouter.post(
   },
 );
 
+/** POST /api/startups/:id/rag-documents/from-url */
+ragDocumentsRouter.post("/:id/rag-documents/from-url", async (req, res) => {
+  if (!r2Configured()) {
+    res.status(503).json({ detail: "Object storage is not configured" });
+    return;
+  }
+
+  const identity = authIdentityOr500(res);
+  if (!identity) return;
+
+  const body = req.body as { url?: string; filename?: string };
+  const url = body.url?.trim();
+  if (!url) {
+    res.status(400).json({ detail: "url is required" });
+    return;
+  }
+
+  try {
+    const { fetchRemoteDocument } = await import(
+      "../../lib/engram/fetchRemoteDocument"
+    );
+    const remote = await fetchRemoteDocument(url);
+    const filename = body.filename?.trim() || remote.filename;
+    const mimeType = remote.mimeType || "application/octet-stream";
+
+    const doc = await RagDocument.create({
+      startupId: new mongoose.Types.ObjectId(req.params.id),
+      filename,
+      mimeType,
+      uploadedBy: identity.userId,
+      storageKey: "pending",
+      sizeBytes: remote.buffer.length,
+      status: "processing",
+      chunkCount: 0,
+    });
+
+    const storageKey = buildRagDocumentKey({
+      userId: identity.userId,
+      startupId: req.params.id,
+      docId: doc._id.toString(),
+      filename,
+    });
+
+    try {
+      await uploadObject({
+        key: storageKey,
+        body: remote.buffer,
+        contentType: mimeType,
+      });
+      doc.storageKey = storageKey;
+      await doc.save();
+    } catch (err) {
+      await doc.deleteOne();
+      const detail = err instanceof Error ? err.message : "Upload failed";
+      res.status(500).json({ detail });
+      return;
+    }
+
+    await AuditLog.create({
+      startupId: req.params.id,
+      eventType: "document_uploaded",
+      performedBy: identity.userId,
+      performedByEmail: identity.userEmail,
+      details: {
+        documentId: doc._id.toString(),
+        filename,
+        mimeType,
+        sizeBytes: remote.buffer.length,
+        source: "url",
+      },
+    });
+
+    const buffer = remote.buffer;
+    setImmediate(() => {
+      void ingestDocument({
+        startupId: req.params.id,
+        documentId: doc._id.toString(),
+        filename,
+        mimeType,
+        buffer,
+      });
+    });
+
+    res
+      .status(201)
+      .json(serializeDoc(doc.toObject() as unknown as Record<string, unknown>));
+  } catch (err) {
+    res.status(400).json({
+      detail: err instanceof Error ? err.message : "Failed to fetch URL",
+    });
+  }
+});
+
 // DELETE /api/startups/:id/rag-documents/:docId
 ragDocumentsRouter.delete("/:id/rag-documents/:docId", async (req, res) => {
   const doc = await RagDocument.findOneAndDelete({
