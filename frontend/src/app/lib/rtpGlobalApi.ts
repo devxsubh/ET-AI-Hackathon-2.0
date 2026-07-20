@@ -388,6 +388,26 @@ export async function uploadStandaloneDocument(
     return response.json() as Promise<RtpDocument>;
 }
 
+/** Import a Google Drive / public URL into standalone documents. */
+export async function uploadStandaloneDocumentFromUrl(
+    url: string,
+    filename?: string,
+): Promise<RtpDocument> {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${API_BASE}/single-documents/from-url`, {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ url, filename }),
+    });
+    if (!response.ok) {
+        const err = (await response.json().catch(() => ({}))) as {
+            detail?: string;
+        };
+        throw new Error(err.detail ?? `Import failed (${response.status})`);
+    }
+    return response.json() as Promise<RtpDocument>;
+}
+
 export async function listStandaloneDocuments(): Promise<RtpDocument[]> {
     return apiRequest<RtpDocument[]>("/single-documents");
 }
