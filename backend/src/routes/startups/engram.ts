@@ -4,6 +4,7 @@ import multer from "multer";
 import { Startup } from "../../models/startup";
 import { parseDocumentToText } from "../../lib/rag/parseDocument";
 import { ingestDocumentText } from "../../lib/engram/ingest";
+import { fetchRemoteDocument } from "../../lib/engram/fetchRemoteDocument";
 import {
   buildDemoKnowledgeGraph,
   buildDemoRiskReport,
@@ -269,7 +270,7 @@ engramPlantRouter.post("/:id/voice", async (req, res) => {
 
 /**
  * POST /api/startups/:id/ingest
- * Multipart file upload OR JSON { text, filename } — runs Ingestor + Linker.
+ * Multipart file upload OR JSON { text, filename } OR JSON { url } — Ingestor + Linker.
  */
 engramPlantRouter.post(
   "/:id/ingest",
@@ -305,12 +306,34 @@ engramPlantRouter.post(
           text?: string;
           filename?: string;
           content?: string;
+          url?: string;
         };
-        text = (body.text ?? body.content ?? "").trim();
-        filename = body.filename?.trim() || filename;
+        const remoteUrl = body.url?.trim();
+        if (remoteUrl) {
+          try {
+            const remote = await fetchRemoteDocument(remoteUrl);
+            filename = body.filename?.trim() || remote.filename;
+            const pages = await parseDocumentToText(
+              remote.buffer,
+              remote.mimeType,
+              filename,
+            );
+            text = pages.map((p) => p.text).join("\n\n");
+          } catch (err) {
+            res.status(400).json({
+              detail:
+                err instanceof Error ? err.message : "Failed to fetch URL",
+            });
+            return;
+          }
+        } else {
+          text = (body.text ?? body.content ?? "").trim();
+          filename = body.filename?.trim() || filename;
+        }
         if (!text) {
           res.status(400).json({
-            detail: "Provide a file upload or JSON { text, filename }",
+            detail:
+              "Provide a file upload, JSON { text, filename }, or JSON { url }",
           });
           return;
         }
